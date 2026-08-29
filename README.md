@@ -17,7 +17,7 @@ This thesis evaluates Sentinel-1 SAR, Sentinel-2 optical, and fused Sentinel-1/2
 
 Wallonia (~16,844 km²) has a temperate oceanic climate with persistent cloud cover. Agriculture covers ~45% of the land area, ranging from large consolidated parcels in Hesbaye to fragmented fields in the Ardennes.
 
-![Study Area](Images/Study_Area.png)
+![Study Area](Images/Study_Area.jpeg)
 
 ---
 
@@ -33,27 +33,27 @@ Wallonia (~16,844 km²) has a temperate oceanic climate with persistent cloud co
 
 Sentinel-2 datacubes (4 bands × 10 dates × 128×128 pixels) were assembled per chip, including cloud-affected acquisitions to test the model's robustness to contamination.
 
-![Sentinel-2 Data Preparation](Images/S2_Data_Preperation.png)
+![Sentinel-2 Data Preparation](Images/S2_Data_Preperation.jpeg)
 
-![Sentinel-2 Data Preparation (corrected)](Images/S2_Data_Preperation_correct.png)
+![Sentinel-2 Data Preparation (corrected)](Images/S2_Data_Preperation_correct.jpeg)
 
 Scenes with heavy cloud cover (e.g. 2018-03-14) were retained rather than discarded, relying on temporal attention to recover usable signal:
 
-![Sentinel-2 Cloud Data Preparation](Images/S2_Cloud_Data_Preperation.png)
+![Sentinel-2 Cloud Data Preparation](Images/S2_Cloud_Data_Preperation.jpeg)
 
 ### Sentinel-1 Data Preparation
 
 Sentinel-1 chips combine VV backscatter and 6-day interferometric coherence, for both ascending and descending orbits.
 
-![Sentinel-1 Data Preparation](Images/S1_Data_Preperation.png)
+![Sentinel-1 Data Preparation](Images/S1_Data_Preperation.jpeg)
 
-![Sentinel-1 Data Preparation - Ascending vs Descending](Images/S1_Data_Preperation_Asc_Desc.png)
+![Sentinel-1 Data Preparation - Ascending vs Descending](Images/S1_Data_Preperation_Asc_Desc.jpeg)
 
 ### Sentinel-1 / Sentinel-2 Combination
 
 For the fusion configuration, coherence, backscatter, and RGB triplets are aligned in time to feed the dual-input model.
 
-![Sentinel-1 & Sentinel-2 Combination](Images/S1_S2_combination.png)
+![Sentinel-1 & Sentinel-2 Combination](Images/S1_S2_combination.jpeg)
 
 ---
 
@@ -65,7 +65,7 @@ Data is organised into time-series datacubes of shape `(T, C, 128, 128)` and sto
 
 ### Feature Importance (Sentinel-1)
 
-![Sentinel-1 Feature Importance](Images/S1_Importance.png)
+![Sentinel-1 Feature Importance](Images/S1_Importance.jpeg)
 
 ---
 
@@ -95,17 +95,17 @@ Performance reported as Matthews Correlation Coefficient (MCC) for the extent an
 
 Prediction map generated using the **Sentinel-2** configuration:
 
-![Prediction Map - Sentinel-2](Images/Prediction_Map_S2.png)
+![Prediction Map - Sentinel-2](Images/Prediction_Map_S2.jpeg)
 
 Prediction map generated using the **fused Sentinel-1 + Sentinel-2** configuration:
 
-![Prediction Map - Fused Sentinel-1 & Sentinel-2](Images/Prediction_Map_S2_S1.png)
+![Prediction Map - Fused Sentinel-1 & Sentinel-2](Images/Prediction_Map_S2_S1.jpeg)
 
 ### Post-Processed / Polygonized Output
 
 Raw segmentation outputs were polygonized and compared against the Ground Truth LPIS reference (correct detections, incorrect detections, and omissions):
 
-![Polygonized Output vs Ground Truth LPIS](Images/Polygonized_output.png)
+![Polygonized Output vs Ground Truth LPIS](Images/Polygonized_output.jpeg)
 
 ---
 

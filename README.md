@@ -35,8 +35,6 @@ Sentinel-2 datacubes (4 bands × 10 dates × 128×128 pixels) were assembled per
 
 ![Sentinel-2 Data Preparation](Images/S2_Data_Preperation.jpeg)
 
-![Sentinel-2 Data Preparation (corrected)](Images/S2_Data_Preperation_correct.jpeg)
-
 Scenes with heavy cloud cover (e.g. 2018-03-14) were retained rather than discarded, relying on temporal attention to recover usable signal:
 
 ![Sentinel-2 Cloud Data Preparation](Images/S2_Cloud_Data_Preperation.jpeg)
@@ -45,9 +43,9 @@ Scenes with heavy cloud cover (e.g. 2018-03-14) were retained rather than discar
 
 Sentinel-1 chips combine VV backscatter and 6-day interferometric coherence, for both ascending and descending orbits.
 
-![Sentinel-1 Data Preparation](Images/S1_Data_Preperation.jpeg)
+![Sentinel-1 Data Preparation Sentinel-1 VV Descending Orbit only ](Images/S1_Data_Preperation.jpeg)
 
-![Sentinel-1 Data Preparation - Ascending vs Descending](Images/S1_Data_Preperation_Asc_Desc.jpeg)
+![Sentinel-1 Data Preparation - Sentinel-1 VV Ascending and Descending Orbit](Images/S1_Data_Preperation_Asc_Des.jpeg)
 
 ### Sentinel-1 / Sentinel-2 Combination
 
@@ -63,11 +61,6 @@ Data is organised into time-series datacubes of shape `(T, C, 128, 128)` and sto
 
 **Train years:** 2018, 2019, 2021 — **Test year (held out):** 2020
 
-### Feature Importance (Sentinel-1)
-
-![Sentinel-1 Feature Importance](Images/S1_Importance.jpeg)
-
----
 
 ## Key Results (2020 Wallonia Test Set, ~10,000 chips)
 
@@ -95,11 +88,11 @@ Performance reported as Matthews Correlation Coefficient (MCC) for the extent an
 
 Prediction map generated using the **Sentinel-2** configuration:
 
-![Prediction Map - Sentinel-2](Images/Prediction_Map_S2.jpeg)
+![Prediction Map - Sentinel-2](Images/Prediction_Map.jpeg)
 
 Prediction map generated using the **fused Sentinel-1 + Sentinel-2** configuration:
 
-![Prediction Map - Fused Sentinel-1 & Sentinel-2](Images/Prediction_Map_S2_S1.jpeg)
+![Prediction Map - Fused Sentinel-1 & Sentinel-2](Images/Prediction_Map_S2.jpeg)
 
 ### Post-Processed / Polygonized Output
 

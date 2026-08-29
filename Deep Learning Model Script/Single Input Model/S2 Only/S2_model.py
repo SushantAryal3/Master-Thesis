@@ -1221,9 +1221,9 @@ def train(args):
     reuse_splits = args.reuse_splits
     split_dir      = Path(args.split_dir)
     train_zarr_paths = [
-        "/globalsc/ucl/elia/aryal/s2_h5_with_clouds/Zarr/s2_2018.zarr",
-        "/globalsc/ucl/elia/aryal/s2_h5_with_clouds/Zarr/s2_2019.zarr",
-        "/globalsc/ucl/elia/aryal/s2_h5_with_clouds/Zarr/s2_2021.zarr",
+        "/globalsc/ucl/elia/aryal/S2/S2_Zarr/s2_2018.zarr",
+        "/globalsc/ucl/elia/aryal/S2/S2_Zarr/s2_2019.zarr",
+        "/globalsc/ucl/elia/aryal/S2/S2_Zarr/s2_2021.zarr",
     ]
     YEARS = [2018, 2019, 2021]
     PERC_CACHE_DIR = Path(args.perc_cache_dir)
@@ -1232,7 +1232,7 @@ def train(args):
     resume_path    = CKPT_DIR / "latest_checkpoint.pth"
     torch.manual_seed(0)
     NClasses = 1
-    nf = 64
+    nf = 96
     verbose = True
     all_percs = {
         i: compute_percentiles_if_needed(Path(train_zarr_paths[i]), year, PERC_CACHE_DIR)
@@ -1256,7 +1256,7 @@ def train(args):
         "NClasses"         : NClasses,
         "verbose"          : verbose,
         "segm_act"         : "sigmoid",
-        "TimeDim"          : 10,
+        "TimeDim"          : 4,
         "nfilters_embed"   : nf,
     }
     

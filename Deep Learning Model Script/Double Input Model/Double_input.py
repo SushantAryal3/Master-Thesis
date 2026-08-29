@@ -31,7 +31,6 @@ from typing import Tuple
 import albumentations as A
 from albumentations.core.transforms_interface import  ImageOnlyTransform
 
-## Author##
 def get_norm3d(name,channels,num_groups=None):
     if name == 'BatchNorm':
         return torch.nn.BatchNorm3d(num_features=channels)
@@ -477,9 +476,7 @@ class FusionCAT(torch.nn.Module):
 class FusionV23D(torch.nn.Module):
     def __init__(self,nfilters_in, nfilters_out, scales, kernel_size=3, padding=1,nheads=1, norm = 'BatchNorm', norm_groups=None,correlation_method='mean' ,  TimeDim=None, depth=10.0):
         super().__init__()
-        # Go through PatchAttention Mechanism
         self.relatt = RelPatchAttention3DTCHW(in_channels=nfilters_in, out_channels=nfilters_out, kernel_size=kernel_size, padding=padding, nheads=nheads, norm =norm, norm_groups=norm_groups, scales=scales,  correlation_method=correlation_method,TimeDim=TimeDim, depth=depth)
-        # It will take two tensor concatenated together and ouput nfilters_out
         self.fuse = Conv3DNormed(in_channels=nfilters_out*2, out_channels=nfilters_out,kernel_size= kernel_size, padding = padding, norm_type= norm, num_groups=norm_groups, groups=nheads)
 
     def forward(self, input_t1, input_t2):
@@ -1222,7 +1219,7 @@ class MultiZarrChipDataset(Dataset):
             "chip_id":    chip_id,
             "row_off":    row_off,
             "col_off":    col_off,
-            "region_id":  int(root["meta/region_id"][chip_idx]),
+            # "region_id":  int(root["meta/region_id"][chip_idx]),
             "block_idx":  int(root["meta/block_idx"][chip_idx]),
         }
         return (
@@ -1321,7 +1318,6 @@ def build_scheduler(optimizer, T_0=50, T_mult=2, eta_min=1e-6):
     return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0=T_0, T_mult=T_mult, eta_min=eta_min
     )
-
 def train(args):
     num_epochs = args.epochs
     batch_size = args.batch_size
@@ -1331,13 +1327,11 @@ def train(args):
     CACHE_DIR    = Path(args.cache_dir)
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     resume_path    = CKPT_DIR / "latest_checkpoint.pth"
-    
     train_zarr_paths = [
-        Path("/globalsc/ucl/elia/aryal/combine_zarr/2018.zarr"),
-        Path("/globalsc/ucl/elia/aryal/combine_zarr/2019.zarr"),
-        Path("/globalsc/ucl/elia/aryal/combine_zarr/2021.zarr")
+        Path("/globalsc/ucl/elia/aryal/combine_zarr_time_4_training_VV/2018.zarr"),
+        Path("/globalsc/ucl/elia/aryal/combine_zarr_time_4_training_VV/2019.zarr"),
+        Path("/globalsc/ucl/elia/aryal/combine_zarr_time_4_training_VV/2021.zarr")
     ]
-    
     torch.manual_seed(0)
     NClasses = 1
     nf = 64
@@ -1372,9 +1366,7 @@ def train(args):
     criterion = ftnmt_loss().cuda()
     optimizer = torch.optim.RAdam(model.parameters(),lr=1e-3,eps=1.e-6)
     scaler = GradScaler()
-    scheduler = build_scheduler(optimizer, T_0=30, T_mult=2, eta_min=1e-6)
-    
-    # ---- Resume from checkpoint if it exists ----
+    scheduler = build_scheduler(optimizer, T_0=20, T_mult=2, eta_min=1e-6)
     start_epoch       = 0
     patience_counter  = 0
     best_epoch        = 0
@@ -1398,7 +1390,6 @@ def train(args):
     else:
         print("[info] No checkpoint found, starting fresh training.")
     
-    # --- splits (spatial blocks across 2018 + 2019) ---
     split_files_exist = all(
         (split_dir / f).exists()
         for f in ("train_indices.npy", "val_indices.npy")
@@ -1413,14 +1404,8 @@ def train(args):
             seed=seed,
         )
         save_splits_multi(split_dir, train_indices, val_indices)
-
-    # --- datasets & dataloaders ---
-    # transform_train = TrainingTransform(mode="train")
-    # transform_valid = TrainingTransform(mode="valid")
-
     train_ds = MultiZarrChipDataset(train_zarr_paths, train_indices, percs=percs, transform=None)
     val_ds   = MultiZarrChipDataset(train_zarr_paths, val_indices,   percs=percs, transform=None)
-
     train_loader = DataLoader(train_ds, batch_size=batch_size,
                               shuffle=True,
                               num_workers=args.num_workers, pin_memory=True)
@@ -1436,10 +1421,8 @@ def train(args):
         "lr",
         "train_loss",
         "val_loss", "val_loss_segm", "val_loss_bound", "val_loss_dist",
-        # Segmentation metrics
         "segm_acc", "segm_mcc", "segm_kappa", "segm_precision",
         "segm_recall", "segm_iou", "segm_f1",
-        # Boundary metrics
         "bound_acc", "bound_mcc", "bound_kappa", "bound_precision",
         "bound_recall", "bound_iou", "bound_f1",  
     ]
@@ -1483,7 +1466,6 @@ def train(args):
         scheduler.step()
         current_lr = optimizer.param_groups[0]["lr"]
 
-        #--- Validation------------------------
         kwargs         = monitor_epoch(model, epoch, valid_loader, NClasses, criterion)
         avg_train_loss = tot_loss / max(n_train_batches, 1)
         kwargs["avg_train_loss"] = avg_train_loss
@@ -1606,16 +1588,16 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PTAViT3D Training")
     parser.add_argument("--epochs",        type=int,   default=150)
-    parser.add_argument("--batch_size",    type=int,   default=8)
+    parser.add_argument("--batch_size",    type=int,   default=2)
     parser.add_argument("--seed",          type=int,   default=48)
     parser.add_argument("--num_workers",   type=int,   default=4)
     parser.add_argument("--reuse_splits",  action="store_true", default=True)
     parser.add_argument("--block_size",    type=int,   default=512)
     parser.add_argument("--val_frac",      type=float, default=0.1)
     parser.add_argument("--patience",      type=int,   default=20)
-    parser.add_argument("--split_dir",     type=str,   default="/home/ucl/elia/aryal/Double Input Model/first/split_dir_s2")
-    parser.add_argument("--ckpt_dir",      type=str,   default="/home/ucl/elia/aryal/Single Input Model/first/")
-    parser.add_argument("--cache_dir", type=str, default="/home/ucl/elia/aryal/Double Input Model/first/percentile_cache")
+    parser.add_argument("--split_dir",     type=str,   default="/home/ucl/elia/aryal/Double Input Model/third_4_timestep_with/split_dir_s2")
+    parser.add_argument("--ckpt_dir",      type=str,   default="/home/ucl/elia/aryal/Double Input Model/third_4_timestep_with")
+    parser.add_argument("--cache_dir", type=str, default="/home/ucl/elia/aryal/Double Input Model/third_4_timestep_with/percentile_cache")
     args = parser.parse_args()
     args = parser.parse_args()
     train(args)

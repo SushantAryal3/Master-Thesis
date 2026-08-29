@@ -1,41 +1,9 @@
-"""
-S2 Optical Zarr Builder — 2018  (X + Y)
-========================================
-Builds a Zarr dataset from S2 HDF5 chips (4 bands: B2, B3, B4, B8)
-combined with segmentation labels from .npy files.
-
-Output Zarr structure:
-    X        : (N, B=4, T=10, H=128, W=128)  float32
-               channel 0 = B2
-               channel 1 = B3
-               channel 2 = B4
-               channel 3 = B8
-    Y        : (N, L=3, H=128, W=128)         float32
-               channel 0 = extent
-               channel 1 = boundary
-               channel 2 = dist
-    row_off  : (N,)   int32
-    col_off  : (N,)   int32
-    x0       : (N,)   float64
-    y0       : (N,)   float64
-    block_id : (N,)   int32   — which stride-10 block (0=first, 1=second...)
-    year     : (N,)   int32
-    dates    : (N, 10) U10    — the 10 actual acquisition dates
-
-Rules:
-    - Only chips that have a matching label .npy file are included
-    - Chips with fewer than 10 timestamps are skipped
-    - Y is the SAME for all blocks of the same chip
-    - Stride = 10, non-overlapping blocks
-"""
-
 from __future__ import annotations
-
+import argparse
 import re
 import shutil
 from pathlib import Path
 from typing import List, Tuple, Dict
-
 import h5py
 import numpy as np
 import zarr
@@ -45,22 +13,6 @@ from rasterio.windows import Window
 import rasterio
 from tqdm import tqdm
 
-S2_ROOT     = Path("/export/students/aryal/s2_h5/2020")
-LABEL_ROOT  = Path("/export/students/aryal/Label_Chips_npy_128_from_ref_2020_test/2020")
-REF_TIF     = Path("/export/students/aryal/WALLONIA_2018-07_8_median_trim.tif")
-OUT_ZARR    = Path("/export/students/aryal/S2_dataset/s2_optical_2020_test.zarr")
-
-YEAR        = 2020
-CHIP        = 128
-T_BLOCK     = 10          
-B           = 4           
-L           = 3           
-BAND_NAMES  = ["B2", "B3", "B4", "B8"]
-LABEL_NAMES = ["extent", "boundary", "dist"]
-LABEL_CH    = [0, 1, 2]   
-
-SAMPLE_CHUNK = 32
-OVERWRITE    = True
 
 NPY_RE = re.compile(r"loc_r(?P<r>\d+)_c(?P<c>\d+)\.npy$", re.IGNORECASE)
 
@@ -85,10 +37,6 @@ def read_ref_meta(path: Path) -> dict:
 
 
 def load_label_index(label_root: Path) -> Dict[str, Path]:
-    """
-    Scan label_root for loc_r????_c?????.npy files.
-    Returns dict: loc_name → npy_path
-    """
     index = {}
     for p in sorted(label_root.glob("loc_r*_c*.npy")):
         m = NPY_RE.search(p.name)
@@ -100,22 +48,14 @@ def load_label_index(label_root: Path) -> Dict[str, Path]:
     return index
 
 
-def get_blocks(
+def get_blocks_S2_Zarr(
     h5_path: Path,
     t_block: int,
 ) -> List[Tuple[List[str], List[int]]]:
-    """
-    Opens the H5 file (attrs only), reads dates,
-    returns list of stride-t_block non-overlapping blocks.
-    Each block: (dates_list, indices_list)
-    Returns [] if fewer than t_block timestamps.
-    """
     with h5py.File(h5_path, "r") as f:
         dates = list(f.attrs.get("dates", []))
-
     if len(dates) < t_block:
         return []
-
     blocks = []
     n_blocks = len(dates) // t_block
     for b in range(n_blocks):
@@ -124,19 +64,14 @@ def get_blocks(
         block_dates = dates[start:end]
         block_idxs  = list(range(start, end))
         blocks.append((block_dates, block_idxs))
-
     return blocks
 
-def pass1_count(
+
+def pass1_count_S2_Zarr(
     s2_root    : Path,
     label_index: Dict[str, Path],
     t_block    : int,
 ) -> Tuple[int, List[Tuple[int, int, int]]]:
-    """
-    Returns:
-        N_total   : total number of samples
-        chip_info : list of (r0, c0, n_blocks) for valid chips only
-    """
     s2_chips = {p.stem: p for p in sorted(s2_root.glob("r*.h5"))}
 
     print(f"  S2 H5 chips         : {len(s2_chips):,}")
@@ -156,7 +91,7 @@ def pass1_count(
             skipped_no_label += 1
             continue
 
-        blocks = get_blocks(s2_chips[name], t_block)
+        blocks = get_blocks_S2_Zarr(s2_chips[name], t_block)
         if not blocks:
             skipped_low_t += 1
             continue
@@ -171,7 +106,8 @@ def pass1_count(
     print(f"  Total samples N               : {N_total:,}")
     return N_total, chip_info
 
-def init_zarr(
+
+def init_zarr_S2_Zarr(
     out_zarr    : Path,
     N           : int,
     B           : int,
@@ -182,6 +118,11 @@ def init_zarr(
     compressor,
     ref         : dict,
     overwrite   : bool,
+    year        : int,
+    s2_root     : Path,
+    label_root  : Path,
+    band_names  : List[str],
+    label_names : List[str],
 ) -> zarr.Group:
 
     if overwrite and out_zarr.exists():
@@ -237,24 +178,24 @@ def init_zarr(
     )
 
     root.attrs.update({
-        "year"       : YEAR,
+        "year"       : year,
         "chip"       : chip,
         "T"          : T,
         "B"          : B,
         "L"          : L,
-        "bands"      : BAND_NAMES,
-        "labels"     : LABEL_NAMES,
+        "bands"      : band_names,
+        "labels"     : label_names,
         "crs_wkt"    : ref["crs"].to_wkt(),
         "transform"  : tuple(map(float, ref["transform"])),
         "width"      : int(ref["width"]),
         "height"     : int(ref["height"]),
-        "s2_root"    : str(S2_ROOT),
-        "label_root" : str(LABEL_ROOT),
+        "s2_root"    : str(s2_root),
+        "label_root" : str(label_root),
         "stride"     : T,
         "description": (
-            "S2 optical composite 2019. "
-            f"X: bands = {BAND_NAMES}. "
-            f"Y: channels = {LABEL_NAMES}. "
+            f"S2 optical composite {year}. "
+            f"X: bands = {band_names}. "
+            f"Y: channels = {label_names}. "
             f"Each sample = {T} consecutive timestamps "
             f"(stride={T}, non-overlapping blocks)."
         ),
@@ -262,7 +203,8 @@ def init_zarr(
 
     return root
 
-def pass2_write(
+
+def pass2_write_S2_Zarr(
     root         : zarr.Group,
     s2_root      : Path,
     label_index  : Dict[str, Path],
@@ -271,6 +213,9 @@ def pass2_write(
     chip         : int,
     t_block      : int,
     year         : int,
+    B            : int,
+    L            : int,
+    label_ch     : List[int],
 ) -> None:
 
     s2_chips = {p.stem: p for p in sorted(s2_root.glob("r*.h5"))}
@@ -298,10 +243,10 @@ def pass2_write(
 
         # load label once per chip — same Y for all blocks
         y_full   = np.load(npy_path, mmap_mode="r")         # (4, H, W)
-        ybuf[:]  = np.asarray(y_full[LABEL_CH], dtype=np.float32)
+        ybuf[:]  = np.asarray(y_full[label_ch], dtype=np.float32)
 
         # get blocks
-        blocks = get_blocks(h5_path, t_block)
+        blocks = get_blocks_S2_Zarr(h5_path, t_block)
 
         # open H5 pixel data once per chip
         with h5py.File(h5_path, "r") as f:
@@ -332,25 +277,40 @@ def pass2_write(
     print(f"\n  Written {idx:,} samples total")
 
 
-def build():
+def buildS2Zarr(
+    year         : int,
+    s2_root      : Path,
+    label_root   : Path,
+    out_zarr     : Path,
+    ref_tif      : Path,
+    chip         : int,
+    t_block      : int,
+    B            : int,
+    L            : int,
+    sample_chunk : int,
+    band_names   : List[str],
+    label_names  : List[str],
+    label_ch     : List[int],
+    overwrite    : bool,
+) -> None:
     print("=" * 60)
-    print(f"S2 Optical Zarr Builder — {YEAR}  (X + Y)")
-    print(f"  S2 H5 root : {S2_ROOT}")
-    print(f"  Labels     : {LABEL_ROOT}")
-    print(f"  Output     : {OUT_ZARR}")
-    print(f"  T={T_BLOCK}  B={B}  L={L}  chip={CHIP}")
+    print(f"S2 Optical Zarr Builder — {year}  (X + Y)")
+    print(f"  S2 H5 root : {s2_root}")
+    print(f"  Labels     : {label_root}")
+    print(f"  Output     : {out_zarr}")
+    print(f"  T={t_block}  B={B}  L={L}  chip={chip}")
     print("=" * 60)
 
-    ref = read_ref_meta(REF_TIF)
+    ref = read_ref_meta(ref_tif)
     print(f"\n✓ REF TIF CRS  : {ref['crs'].to_string()}")
     print(f"  Pixel size   : {ref['transform'].a} × {-ref['transform'].e} m\n")
 
     print("[Labels] Scanning label files ...")
-    label_index = load_label_index(LABEL_ROOT)
+    label_index = load_label_index(label_root)
     print(f"  Found {len(label_index):,} label .npy files\n")
 
     print("[Pass 1] Counting valid samples ...")
-    N_total, chip_info = pass1_count(S2_ROOT, label_index, T_BLOCK)
+    N_total, chip_info = pass1_count_S2_Zarr(s2_root, label_index, t_block)
 
     if N_total == 0:
         raise RuntimeError(
@@ -358,49 +318,57 @@ def build():
             "Check paths, year, and that label files exist."
         )
 
-    x_bytes = N_total * B * T_BLOCK * CHIP * CHIP * 4
-    y_bytes = N_total * L * CHIP * CHIP * 4
+    x_bytes = N_total * B * t_block * chip * chip * 4
+    y_bytes = N_total * L * chip * chip * 4
     raw_gb  = (x_bytes + y_bytes) / 1e9
     print(f"\n  Estimated uncompressed : {raw_gb:.1f} GB")
     print(f"  Estimated compressed   : {raw_gb * 0.5:.1f} GB\n")
 
     print("[Init] Creating Zarr store ...")
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
-    root = init_zarr(
-        out_zarr     = OUT_ZARR,
+    root = init_zarr_S2_Zarr(
+        out_zarr     = out_zarr,
         N            = N_total,
         B            = B,
-        T            = T_BLOCK,
+        T            = t_block,
         L            = L,
-        chip         = CHIP,
-        sample_chunk = SAMPLE_CHUNK,
+        chip         = chip,
+        sample_chunk = sample_chunk,
         compressor   = compressor,
         ref          = ref,
-        overwrite    = OVERWRITE,
+        overwrite    = overwrite,
+        year         = year,
+        s2_root      = s2_root,
+        label_root   = label_root,
+        band_names   = band_names,
+        label_names  = label_names,
     )
-    print(f"  Created: {OUT_ZARR}\n")
+    print(f"  Created: {out_zarr}\n")
 
     print("[Pass 2] Writing data ...")
-    pass2_write(
+    pass2_write_S2_Zarr(
         root          = root,
-        s2_root       = S2_ROOT,
+        s2_root       = s2_root,
         label_index   = label_index,
         chip_info     = chip_info,
         ref_transform = ref["transform"],
-        chip          = CHIP,
-        t_block       = T_BLOCK,
-        year          = YEAR,
+        chip          = chip,
+        t_block       = t_block,
+        year          = year,
+        B             = B,
+        L             = L,
+        label_ch      = label_ch,
     )
 
-    zarr.consolidate_metadata(str(OUT_ZARR))
+    zarr.consolidate_metadata(str(out_zarr))
 
     total_bytes = sum(
-        f.stat().st_size for f in OUT_ZARR.rglob("*") if f.is_file()
+        f.stat().st_size for f in out_zarr.rglob("*") if f.is_file()
     )
 
     print("\n" + "=" * 60)
     print("✅ Done")
-    print(f"   Output      : {OUT_ZARR}")
+    print(f"   Output      : {out_zarr}")
     print(f"   X shape     : {root['X'].shape}")
     print(f"   Y shape     : {root['Y'].shape}")
     print(f"   N samples   : {N_total:,}")
@@ -409,25 +377,18 @@ def build():
     print("=" * 60)
 
     print("\n[Verify] Reading back first sample ...")
-    z    = zarr.open_group(str(OUT_ZARR), mode="r")
+    z    = zarr.open_group(str(out_zarr), mode="r")
     x0s  = z["X"][0]
     y0s  = z["Y"][0]
     d0   = z["dates"][0]
 
     print(f"  X[0] shape          : {x0s.shape}")
-    print(f"  X[0] B2   range     : [{np.nanmin(x0s[0]):.4f}, {np.nanmax(x0s[0]):.4f}]")
-    print(f"  X[0] B3   range     : [{np.nanmin(x0s[1]):.4f}, {np.nanmax(x0s[1]):.4f}]")
-    print(f"  X[0] B4   range     : [{np.nanmin(x0s[2]):.4f}, {np.nanmax(x0s[2]):.4f}]")
-    print(f"  X[0] B8   range     : [{np.nanmin(x0s[3]):.4f}, {np.nanmax(x0s[3]):.4f}]")
+    for bi, bname in enumerate(band_names):
+        print(f"  X[0] {bname:<5} range     : [{np.nanmin(x0s[bi]):.4f}, {np.nanmax(x0s[bi]):.4f}]")
     print(f"  Y[0] shape          : {y0s.shape}")
-    print(f"  Y[0] extent  range  : [{np.nanmin(y0s[0]):.4f}, {np.nanmax(y0s[0]):.4f}]")
-    print(f"  Y[0] boundary range : [{np.nanmin(y0s[1]):.4f}, {np.nanmax(y0s[1]):.4f}]")
-    print(f"  Y[0] dist range     : [{np.nanmin(y0s[2]):.4f}, {np.nanmax(y0s[2]):.4f}]")
+    for li, lname in enumerate(label_names):
+        print(f"  Y[0] {lname:<10} range  : [{np.nanmin(y0s[li]):.4f}, {np.nanmax(y0s[li]):.4f}]")
     print(f"  dates[0]            : {list(d0)}")
     print(f"  row_off[0]          : {z['row_off'][0]}   col_off[0]: {z['col_off'][0]}")
     print(f"  x0[0]               : {z['x0'][0]:.4f}   y0[0]: {z['y0'][0]:.4f}")
     print("\n✓ Verification complete")
-
-
-if __name__ == "__main__":
-    build()
